@@ -77,6 +77,7 @@ function draw(){
     s+='<h2>'+(S.winner=='L'?'🔵 Liberale gewinnen':'🔴 Faschisten gewinnen')+'</h2><p>'+esc(S.why)+'</p>'+(m.host?'<button class="go" onclick="act(\'new\')">Neues Spiel (Lobby)</button>':'');
   }
   h+='<div class="panel">'+s+'</div>';
+  if(m.host&&ph!='lobby'&&ph!='over')h+='<button onclick="if(confirm(\'Spiel wirklich abbrechen und zurück zur Lobby?\'))act(\'new\')">Spiel neu starten (Host)</button>';
   if(S.lv&&ph!='vote'&&ph!='lobby')h+='<small>Letzte Wahl: '+S.lv.map(x=>esc(x[0])+(x[1]?' ✅':' ❌')).join(', ')+'</small>';
   h+='<div class="log">'+S.log.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div>';
   $.innerHTML=h;

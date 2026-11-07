@@ -101,7 +101,7 @@ function act(p,a){
       }else return bad;
       break}
     case 'ok':if(ph=='power'&&G.power=='ack'&&id==G.pres)adv();break;
-    case 'new':if(ph=='over'&&G.order[0]==id)reset();break;
+    case 'new':if(ph!='lobby'&&G.order[0]==id){reset();}break;
     default:return bad;
   }
 }

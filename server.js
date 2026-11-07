@@ -124,7 +124,7 @@ function view(id){
   return{phase:ph,lib:G.lib,fas:G.fas,track:G.track,
     me:{id,name:me.name,role:me.role,alive:me.alive,host:G.order[0]==id},
     pl:G.order.map(i=>{const q=P[i];return{id:i,name:q.name,alive:q.alive,on:!!q.res||!!q.bot,bot:!!q.bot,
-      role:(over||i==id||(me.role=='F'&&q.role!='L')||(me.role=='H'&&n<=6&&q.role=='F'))?q.role:null}}),
+      role:(over||i==id||(me.role=='F'&&q.role!='L'))?q.role:null}}),
     ev:EV,last:LAST,pres:G.pres,chan:G.chan,nom:G.nom,voted:Object.keys(G.votes),lv:G.lv,
     hand:(ph=='legP'&&id==G.pres)||(ph=='legC'&&id==G.chan)?G.hand:null,
     elig:ph=='nominate'?elig():null,power:G.power,veto:G.veto,fas5:G.fas>=5,inv:G.inv,priv:G.priv[id]||null,

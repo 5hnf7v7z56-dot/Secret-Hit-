@@ -67,14 +67,20 @@ function draw(){
   const m=S.me,L=S.pl,ph=S.phase,nmOf=i=>(L.find(p=>p.id==i)||{}).name||'?',pres=esc(nmOf(S.pres));
   const btns=(ids,t)=>ids.map(i=>'<button onclick="act(\''+t+'\',\''+i+'\')">'+esc(nmOf(i))+'</button>').join('');
   let h='<div class="top"><b>'+esc(m.name)+'</b>'+(m.role?'<button class="sm" onclick="show=!show;draw()">'+(show?'Verbergen':'Meine Rolle')+'</button>':'')+'</div>';
-  if(m.role&&show)h+='<div class="role" style="background:'+RC[m.role][1]+'">'+RC[m.role][0]+'</div>';
+  if(m.role&&show){
+    h+='<div class="role" style="background:'+RC[m.role][1]+'">'+RC[m.role][0]+'</div>';
+    if(m.role=='F'){
+      const hi=L.filter(p=>p.role=='H').map(p=>esc(p.name)),fr=L.filter(p=>p.role=='F'&&p.id!=m.id).map(p=>esc(p.name));
+      h+='<div class="panel">Hitler: <b>'+(hi.join(', ')||'?')+'</b><br>'+(fr.length?'Deine Mitfaschisten: <b>'+fr.join(', ')+'</b>':'Keine weiteren Faschisten – nur Hitler.')+'</div>';
+    }
+  }
   const nn=L.length,nf=[0,0,0,0,0,2,2,3,3,4,4][nn]||0;
   if(ph!='lobby')h+=board(nn,null);
   if(nn>=5)h+='<div class="board">'+(ph!='lobby'?'<span>Chaos '+S.track+'/3</span>':'')+'<span>🔴 '+nf+' Faschisten (inkl. Hitler)</span><span>🔵 '+(nn-nf)+' Liberale</span></div>';
   if(ph!='lobby')kick=null;
   const canK=m.host&&ph=='lobby';
   h+='<div class="pl">'+L.map(p=>{
-    const tag=esc(p.name)+(p.bot?' 🤖':'')+(p.id==S.pres?' 🎩':'')+(p.id==S.chan?' 🤝':'')+(p.on?'':' ⚠️')+((p.role&&(p.id!=m.id||ph=='over'))?' <small>['+RC[p.role][0]+']</small>':'');
+    const tag=esc(p.name)+(p.bot?' 🤖':'')+(p.id==S.pres?' 🎩':'')+(p.id==S.chan?' 🤝':'')+(p.on?'':' ⚠️')+((p.role&&ph=='over')?' <small>['+RC[p.role][0]+']</small>':'');
     const k=canK&&p.id!=m.id;
     return '<div class="p'+(p.alive?'':' dead')+'"'+(k?' data-k="'+p.id+'"':'')+'><span>'+tag+'</span>'+(k&&kick==p.id?'<span><button class="kb" onclick="act(\'kick\',\''+p.id+'\');kick=null">Entfernen</button><button class="kc" onclick="kick=null;draw()">✕</button></span>':'')+'</div>';
   }).join('')+'</div>'+(canK&&L.length>1?'<small>Tipp: Spieler lange drücken oder nach links wischen zum Entfernen</small>':'');

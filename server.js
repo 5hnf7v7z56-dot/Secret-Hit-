@@ -1,9 +1,9 @@
 // Secret Hitler – Server ohne Abhängigkeiten. Start: node server.js
 const http=require('http'),fs=require('fs'),os=require('os'),cr=require('crypto');
 const PORT=process.env.PORT||3000;
-const P={};let G;
+const P={};let G,EV=0,LAST=null;
 const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
-const reset=()=>{G={phase:'lobby',order:Object.keys(P),log:[],lib:0,fas:0,track:0,deck:[],disc:[],pres:null,chan:null,lastP:null,lastC:null,nom:null,votes:{},lv:null,hand:[],power:null,winner:null,why:'',priv:{},sp:null,idx:0,inv:[],veto:null};for(const p of Object.values(P)){p.role=null;p.alive=true}};
+const reset=()=>{G={phase:'lobby',order:Object.keys(P),log:[],lib:0,fas:0,track:0,deck:[],disc:[],pres:null,chan:null,lastP:null,lastC:null,nom:null,votes:{},lv:null,hand:[],power:null,winner:null,why:'',priv:{},sp:null,idx:0,inv:[],veto:null};LAST=null;for(const p of Object.values(P)){p.role=null;p.alive=true}};
 reset();
 const log=m=>G.log.push(m),nm=i=>P[i].name,alive=()=>G.order.filter(i=>P[i].alive);
 const draw=k=>{if(G.deck.length<k){G.deck=shuf(G.deck.concat(G.disc));G.disc=[]}return G.deck.splice(0,k)};
@@ -24,7 +24,7 @@ function adv(){
   G.phase='nominate';
 }
 function enact(c,chaos){
-  c=='L'?G.lib++:G.fas++;G.track=0;
+  c=='L'?G.lib++:G.fas++;G.track=0;EV++;LAST={c,chaos:!!chaos};
   log('Gesetz verabschiedet: '+(c=='L'?'Liberal':'Faschistisch')+(chaos?' (Chaos)':''));
   if(G.lib>=5)return win('L','5 liberale Gesetze – Liberale gewinnen!');
   if(G.fas>=6)return win('F','6 faschistische Gesetze – Faschisten gewinnen!');
@@ -100,6 +100,20 @@ function act(p,a){
         G.sp=x;log(nm(id)+' bestimmt '+t.name+' zum nächsten Präsidenten');adv();
       }else return bad;
       break}
+    case 'kick':{
+      if(ph!='lobby'||G.order[0]!=id||x==id||!G.order.includes(x))return bad;
+      G.order=G.order.filter(i=>i!=x);if(P[x].res)P[x].res.end();delete P[x];break}
+    // TESTMODUS-BEGIN
+    case 'bot':case 'fill':{
+      if(ph!='lobby'||G.order[0]!=id)return bad;
+      const N=['Alex','Bea','Carl','Dana','Emil','Fay','Gero','Hana','Ivo','Jule'];
+      let add=a.t=='bot'?1:Math.max(0,7-G.order.length);
+      while(add-->0&&G.order.length<10){
+        const name=N.find(n=>!G.order.some(i=>P[i].name==n));const b='b'+cr.randomBytes(5).toString('hex');
+        P[b]={id:b,name,bot:true,role:null,alive:true,res:null};G.order.push(b);
+      }
+      break}
+    // TESTMODUS-END
     case 'ok':if(ph=='power'&&G.power=='ack'&&id==G.pres)adv();break;
     case 'new':if(ph!='lobby'&&G.order[0]==id){reset();}break;
     default:return bad;
@@ -109,14 +123,35 @@ function view(id){
   const me=P[id],n=G.order.length,ph=G.phase,over=ph=='over';
   return{phase:ph,lib:G.lib,fas:G.fas,track:G.track,
     me:{id,name:me.name,role:me.role,alive:me.alive,host:G.order[0]==id},
-    pl:G.order.map(i=>{const q=P[i];return{id:i,name:q.name,alive:q.alive,on:!!q.res,
+    pl:G.order.map(i=>{const q=P[i];return{id:i,name:q.name,alive:q.alive,on:!!q.res||!!q.bot,bot:!!q.bot,
       role:(over||i==id||(me.role=='F'&&q.role!='L')||(me.role=='H'&&n<=6&&q.role=='F'))?q.role:null}}),
-    pres:G.pres,chan:G.chan,nom:G.nom,voted:Object.keys(G.votes),lv:G.lv,
+    ev:EV,last:LAST,pres:G.pres,chan:G.chan,nom:G.nom,voted:Object.keys(G.votes),lv:G.lv,
     hand:(ph=='legP'&&id==G.pres)||(ph=='legC'&&id==G.chan)?G.hand:null,
     elig:ph=='nominate'?elig():null,power:G.power,veto:G.veto,fas5:G.fas>=5,inv:G.inv,priv:G.priv[id]||null,
     winner:G.winner,why:G.why,log:G.log.slice(-10).reverse()};
 }
-const bc=()=>{for(const p of Object.values(P))if(p.res)p.res.write('data: '+JSON.stringify(view(p.id))+'\n\n')};
+// TESTMODUS-BEGIN
+let bt=null;const sched=()=>{if(bt)return;bt=setTimeout(()=>{bt=null;if(botStep())bc()},1300)};
+function botStep(){
+  const ph=G.phase,B=i=>i&&P[i]&&P[i].bot,pick=a=>a[Math.random()*a.length|0];
+  const dis=i=>{const k=G.hand.indexOf(P[i].role=='L'?'F':'L');return k<0?0:k};
+  const go=(i,o)=>!act(P[i],o);
+  if(ph=='nominate'&&B(G.pres))return go(G.pres,{t:'nominate',x:pick(elig())});
+  if(ph=='vote'){const b=alive().find(i=>B(i)&&!(i in G.votes));if(b)return go(b,{t:'vote',x:Math.random()<.65})}
+  if(ph=='legP'&&B(G.pres))return go(G.pres,{t:'dp',x:dis(G.pres)});
+  if(ph=='legC'){
+    if(G.veto=='asked'&&B(G.pres))return go(G.pres,{t:'vr',x:false});
+    if(G.veto!='asked'&&B(G.chan))return go(G.chan,{t:'dc',x:dis(G.chan)});
+  }
+  if(ph=='power'&&B(G.pres)){
+    if(G.power=='ack')return go(G.pres,{t:'ok'});
+    const t=alive().filter(i=>i!=G.pres&&!(G.power=='inv'&&G.inv.includes(i)));
+    return go(G.pres,{t:'pw',x:pick(t)});
+  }
+  return false;
+}
+// TESTMODUS-END
+const bc=()=>{for(const p of Object.values(P))if(p.res)p.res.write('data: '+JSON.stringify(view(p.id))+'\n\n');sched()};
 setInterval(()=>{for(const p of Object.values(P))if(p.res)p.res.write(':\n\n')},20000);
 http.createServer((q,r)=>{
   const u=new URL(q.url,'http://x');

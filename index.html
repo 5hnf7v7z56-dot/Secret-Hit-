@@ -26,9 +26,23 @@ button:active{filter:brightness(1.3)}
 .priv{font-size:18px;font-weight:600;color:#fcd34d}
 .log div{font-size:13px;color:#aaa;padding:2px 0}
 small{color:#aaa}
+.p{display:flex;align-items:center;justify-content:space-between;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.kb{width:auto;margin:0 0 0 6px;padding:6px 10px;background:#dc2626}.kc{width:auto;margin:0 0 0 4px;padding:6px 10px}
+.bd{margin:10px 0}.bl,.bf{display:flex;gap:5px;padding:6px;border-radius:10px;margin:4px 0}
+.bl{background:#1e3a8a55}.bf{background:#7f1d1d55}
+.sl{flex:1;height:58px;border:2px dashed #666;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.sl.L{background:#2563eb;border:2px solid #93c5fd}.sl.F{background:#dc2626;border:2px solid #fca5a5}
+.sl.new{animation:pu 1s ease-in-out 3}@keyframes pu{50%{transform:scale(1.18);box-shadow:0 0 18px #fff}}
+#ov{position:fixed;inset:0;background:#000d;display:flex;align-items:center;justify-content:center;z-index:9;padding:16px}
+.ovbox{width:100%;max-width:420px;text-align:center}
+.flip{width:150px;height:210px;margin:14px auto;perspective:800px;-webkit-perspective:800px}
+.flipin{width:100%;height:100%;position:relative;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;animation:fl 1.5s ease-out forwards}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;box-shadow:0 12px 30px #000a;border:3px solid #fff4}
+.back{background:#444;font-size:60px}.front{transform:rotateY(180deg)}.front.L{background:#2563eb}.front.F{background:#dc2626}
+@keyframes fl{0%{transform:rotateY(0) scale(.5)}45%{transform:rotateY(0) scale(1.15) translateY(-18px)}100%{transform:rotateY(180deg) scale(1)}}
 </style></head><body><div id="app"></div>
 <script>
-let S=null,id=localStorage.sh_id,show=false;
+let S=null,id=localStorage.sh_id,show=false,kick=null,ev=null;
 const $=document.getElementById('app');
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const RC={L:['Liberaler','#2563eb'],F:['Faschist','#dc2626'],H:['Hitler','#7f1d1d']};
@@ -45,7 +59,7 @@ async function join(){
 }
 function connect(){
   const es=new EventSource('/events?id='+id);
-  es.onmessage=e=>{S=JSON.parse(e.data);draw()};
+  es.onmessage=e=>{S=JSON.parse(e.data);if(ev!==null&&S.ev!==ev&&S.last)showOv(S.last);ev=S.ev;draw()};
   es.onerror=()=>{if(es.readyState==2){localStorage.removeItem('sh_id');id=null;S=null;draw()}};
 }
 function draw(){
@@ -54,12 +68,23 @@ function draw(){
   const btns=(ids,t)=>ids.map(i=>'<button onclick="act(\''+t+'\',\''+i+'\')">'+esc(nmOf(i))+'</button>').join('');
   let h='<div class="top"><b>'+esc(m.name)+'</b>'+(m.role?'<button class="sm" onclick="show=!show;draw()">'+(show?'Verbergen':'Meine Rolle')+'</button>':'')+'</div>';
   if(m.role&&show)h+='<div class="role" style="background:'+RC[m.role][1]+'">'+RC[m.role][0]+'</div>';
-  if(ph!='lobby')h+='<div class="board"><span>Liberal '+S.lib+'/5</span><span>Faschist '+S.fas+'/6</span><span>Chaos '+S.track+'/3</span></div>';
-  h+='<div class="pl">'+L.map(p=>'<div class="p'+(p.alive?'':' dead')+'">'+esc(p.name)+(p.id==S.pres?' 🎩':'')+(p.id==S.chan?' 🤝':'')+(p.on?'':' ⚠️')+((p.role&&(p.id!=m.id||ph=='over'))?' <small>['+RC[p.role][0]+']</small>':'')+'</div>').join('')+'</div>';
+  const nn=L.length,nf=[0,0,0,0,0,2,2,3,3,4,4][nn]||0;
+  if(ph!='lobby')h+=board(nn,null);
+  if(nn>=5)h+='<div class="board">'+(ph!='lobby'?'<span>Chaos '+S.track+'/3</span>':'')+'<span>🔴 '+nf+' Faschisten (inkl. Hitler)</span><span>🔵 '+(nn-nf)+' Liberale</span></div>';
+  if(ph!='lobby')kick=null;
+  const canK=m.host&&ph=='lobby';
+  h+='<div class="pl">'+L.map(p=>{
+    const tag=esc(p.name)+(p.bot?' 🤖':'')+(p.id==S.pres?' 🎩':'')+(p.id==S.chan?' 🤝':'')+(p.on?'':' ⚠️')+((p.role&&(p.id!=m.id||ph=='over'))?' <small>['+RC[p.role][0]+']</small>':'');
+    const k=canK&&p.id!=m.id;
+    return '<div class="p'+(p.alive?'':' dead')+'"'+(k?' data-k="'+p.id+'"':'')+'><span>'+tag+'</span>'+(k&&kick==p.id?'<span><button class="kb" onclick="act(\'kick\',\''+p.id+'\');kick=null">Entfernen</button><button class="kc" onclick="kick=null;draw()">✕</button></span>':'')+'</div>';
+  }).join('')+'</div>'+(canK&&L.length>1?'<small>Tipp: Spieler lange drücken oder nach links wischen zum Entfernen</small>':'');
   let s='';
   if(!m.alive&&ph!='over'&&ph!='lobby')s+='<p>✝ Du bist tot – nicht mehr mitreden!</p>';
   if(ph=='lobby'){
     s+='<p>'+L.length+'/10 Spieler (mind. 5)</p>'+(m.host?'<button class="go" onclick="act(\'start\')">Spiel starten</button>':'<p>Warte auf den Host…</p>');
+    // TESTMODUS-BEGIN
+    if(m.host)s+='<p><small>Testmodus:</small></p><div class="row"><button onclick="act(\'bot\')">+ Bot</button><button onclick="act(\'fill\')">Auf 7 füllen</button></div>';
+    // TESTMODUS-END
   }else if(ph=='nominate'){
     s+=m.id==S.pres?'<p>Du bist Präsident – wähle den Kanzler:</p>'+btns(S.elig,'nominate'):'<p>'+pres+' wählt einen Kanzlerkandidaten…</p>';
   }else if(ph=='vote'){
@@ -82,5 +107,22 @@ function draw(){
   h+='<div class="log">'+S.log.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div>';
   $.innerHTML=h;
 }
+function board(n,hl){
+  const pw=n<=6?['','','👁','🔫','🔫']:n<=8?['','🔍','🎩','🔫','🔫']:['🔍','🔍','🎩','🔫','🔫'];
+  let l='',f='';
+  for(let i=0;i<5;i++)l+='<div class="sl'+(i<S.lib?' L':'')+(hl=='L'&&i==S.lib-1?' new':'')+'">'+(i<S.lib?'':i==4?'🏆':'')+'</div>';
+  for(let i=0;i<6;i++)f+='<div class="sl'+(i<S.fas?' F':'')+(hl=='F'&&i==S.fas-1?' new':'')+'">'+(i<S.fas?'':(pw[i]||(i==5?'☠':'')))+'</div>';
+  return '<div class="bd"><div class="bl">'+l+'</div><div class="bf">'+f+'</div></div>';
+}
+function showOv(l){
+  const o=document.getElementById('ov');if(o)o.remove();
+  const d=document.createElement('div');d.id='ov';const c=l.c;
+  d.innerHTML='<div class="ovbox"><h2>'+(l.chaos?'Chaos – Gesetz vom Stapel':'Neues Gesetz verabschiedet')+'</h2><div class="flip"><div class="flipin"><div class="face back">?</div><div class="face front '+c+'">'+(c=='L'?'LIBERAL':'FASCHIST')+'</div></div></div>'+board(S.pl.length,c)+'<small>Tippen zum Schließen</small></div>';
+  d.onclick=()=>d.remove();document.body.appendChild(d);setTimeout(()=>d.remove(),5000);
+}
+let kx=null,kt=null,kk=null;
+$.addEventListener('touchstart',e=>{const r=e.target.closest('[data-k]');if(!r)return;kx=e.touches[0].clientX;kk=r.dataset.k;kt=setTimeout(()=>{kt=null;kick=kk;draw()},600)},{passive:true});
+$.addEventListener('touchmove',e=>{if(kt&&Math.abs(e.touches[0].clientX-kx)>10){clearTimeout(kt);kt=null}},{passive:true});
+$.addEventListener('touchend',e=>{clearTimeout(kt);kt=null;if(kk&&kx!=null&&kx-e.changedTouches[0].clientX>60){kick=kk;draw()}kx=null;kk=null},{passive:true});
 if(id)connect();else draw();
 </script></body></html>

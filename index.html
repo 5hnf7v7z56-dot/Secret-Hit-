@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Secret Hitler</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#15161a;color:#eee;font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
+#app{max-width:480px;margin:0 auto;padding:12px 0 24px}
+h1,h2{text-align:center;margin:.6em 0}
+input,button{font:inherit;border-radius:10px;border:0;padding:14px;width:100%;margin:5px 0}
+input{background:#262830;color:#fff}
+button{background:#3a3d4a;color:#fff}
+button:active{filter:brightness(1.3)}
+.go{background:#16a34a}.ja{background:#16a34a}.nein{background:#dc2626}
+.sm{width:auto;padding:8px 12px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.role{text-align:center;font-size:26px;font-weight:700;padding:18px;border-radius:12px;margin:8px 0}
+.board{display:flex;gap:6px;margin:10px 0}
+.board span{flex:1;text-align:center;background:#262830;border-radius:8px;padding:8px 2px;font-size:13px}
+.pl .p{background:#202229;border-radius:8px;padding:8px 10px;margin:3px 0}
+.dead{opacity:.4;text-decoration:line-through}
+.panel{background:#202229;border-radius:12px;padding:12px;margin:10px 0}
+.row{display:flex;gap:8px}
+.card{flex:1;text-align:center;padding:30px 4px;border-radius:10px;font-weight:700;font-size:14px}
+.card.L{background:#2563eb}.card.F{background:#dc2626}
+.priv{font-size:18px;font-weight:600;color:#fcd34d}
+.log div{font-size:13px;color:#aaa;padding:2px 0}
+small{color:#aaa}
+</style></head><body><div id="app"></div>
+<script>
+let S=null,id=localStorage.sh_id,show=false;
+const $=document.getElementById('app');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RC={L:['Liberaler','#2563eb'],F:['Faschist','#dc2626'],H:['Hitler','#7f1d1d']};
+async function api(o){
+  o.id=id;
+  try{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)});
+    const j=await r.json();if(j.err)alert(j.err);return j}
+  catch(e){alert('Keine Verbindung zum Server');return{}}
+}
+const act=(t,x)=>api({t,x});
+async function join(){
+  const j=await api({t:'join',name:document.getElementById('n').value});
+  if(j.id){id=j.id;localStorage.sh_id=id;connect()}
+}
+function connect(){
+  const es=new EventSource('/events?id='+id);
+  es.onmessage=e=>{S=JSON.parse(e.data);draw()};
+  es.onerror=()=>{if(es.readyState==2){localStorage.removeItem('sh_id');id=null;S=null;draw()}};
+}
+function draw(){
+  if(!S){$.innerHTML='<h1>Secret Hitler</h1><input id="n" maxlength="14" placeholder="Dein Name" autocomplete="off"><button class="go" onclick="join()">Beitreten</button>';return}
+  const m=S.me,L=S.pl,ph=S.phase,nmOf=i=>(L.find(p=>p.id==i)||{}).name||'?',pres=esc(nmOf(S.pres));
+  const btns=(ids,t)=>ids.map(i=>'<button onclick="act(\''+t+'\',\''+i+'\')">'+esc(nmOf(i))+'</button>').join('');
+  let h='<div class="top"><b>'+esc(m.name)+'</b>'+(m.role?'<button class="sm" onclick="show=!show;draw()">'+(show?'Verbergen':'Meine Rolle')+'</button>':'')+'</div>';
+  if(m.role&&show)h+='<div class="role" style="background:'+RC[m.role][1]+'">'+RC[m.role][0]+'</div>';
+  if(ph!='lobby')h+='<div class="board"><span>Liberal '+S.lib+'/5</span><span>Faschist '+S.fas+'/6</span><span>Chaos '+S.track+'/3</span></div>';
+  h+='<div class="pl">'+L.map(p=>'<div class="p'+(p.alive?'':' dead')+'">'+esc(p.name)+(p.id==S.pres?' 🎩':'')+(p.id==S.chan?' 🤝':'')+(p.on?'':' ⚠️')+((p.role&&(p.id!=m.id||ph=='over'))?' <small>['+RC[p.role][0]+']</small>':'')+'</div>').join('')+'</div>';
+  let s='';
+  if(!m.alive&&ph!='over'&&ph!='lobby')s+='<p>✝ Du bist tot – nicht mehr mitreden!</p>';
+  if(ph=='lobby'){
+    s+='<p>'+L.length+'/10 Spieler (mind. 5)</p>'+(m.host?'<button class="go" onclick="act(\'start\')">Spiel starten</button>':'<p>Warte auf den Host…</p>');
+  }else if(ph=='nominate'){
+    s+=m.id==S.pres?'<p>Du bist Präsident – wähle den Kanzler:</p>'+btns(S.elig,'nominate'):'<p>'+pres+' wählt einen Kanzlerkandidaten…</p>';
+  }else if(ph=='vote'){
+    s+='<p>Präsident <b>'+pres+'</b> + Kanzler <b>'+esc(nmOf(S.nom))+'</b></p>';
+    s+=m.alive&&!S.voted.includes(m.id)?'<div class="row"><button class="ja" onclick="act(\'vote\',true)">JA</button><button class="nein" onclick="act(\'vote\',false)">NEIN</button></div>':'<p>Warten… '+S.voted.length+' abgestimmt</p>';
+  }else if(ph=='legP'||ph=='legC'){
+    if(ph=='legC'&&S.veto=='asked')s+=m.id==S.pres?'<p>Der Kanzler schlägt ein <b>Veto</b> vor. Beide Gesetze verwerfen?</p><div class="row"><button class="ja" onclick="act(\'vr\',true)">Zustimmen</button><button class="nein" onclick="act(\'vr\',false)">Ablehnen</button></div>':m.id==S.chan?'<p>Warte auf die Antwort des Präsidenten…</p>':'<p>Veto-Vorschlag – '+pres+' entscheidet…</p>';
+    else if(S.hand)s+=(ph=='legC'&&S.fas5&&!S.veto?'<button onclick="act(\'veto\')">Veto vorschlagen</button>':'')+'<p>'+(ph=='legP'?'Wirf ein Gesetz ab (die übrigen gehen an den Kanzler):':'Wirf ein Gesetz ab (das andere wird verabschiedet):')+'</p><div class="row">'+S.hand.map((c,i)=>'<div class="card '+c+'" onclick="act(\''+(ph=='legP'?'dp':'dc')+'\','+i+')">'+(c=='L'?'LIBERAL':'FASCHIST')+'</div>').join('')+'</div>';
+    else s+='<p>'+(ph=='legP'?pres+' sichtet die Gesetze…':esc(nmOf(S.chan))+' wählt ein Gesetz…')+'</p>';
+  }else if(ph=='power'){
+    if(m.id!=S.pres)s+='<p>'+pres+' nutzt eine Sonderfähigkeit…</p>';
+    else if(S.power=='ack')s+='<p class="priv">'+esc(S.priv)+'</p><button onclick="act(\'ok\')">OK</button>';
+    else s+='<p>'+{inv:'Untersuche die Partei von:',kill:'Erschieße:',sp:'Bestimme den nächsten Präsidenten:'}[S.power]+'</p>'+btns(L.filter(p=>p.alive&&p.id!=m.id&&!(S.power=='inv'&&S.inv.includes(p.id))).map(p=>p.id),'pw');
+  }else if(ph=='over'){
+    s+='<h2>'+(S.winner=='L'?'🔵 Liberale gewinnen':'🔴 Faschisten gewinnen')+'</h2><p>'+esc(S.why)+'</p>'+(m.host?'<button class="go" onclick="act(\'new\')">Neues Spiel (Lobby)</button>':'');
+  }
+  h+='<div class="panel">'+s+'</div>';
+  if(S.lv&&ph!='vote'&&ph!='lobby')h+='<small>Letzte Wahl: '+S.lv.map(x=>esc(x[0])+(x[1]?' ✅':' ❌')).join(', ')+'</small>';
+  h+='<div class="log">'+S.log.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div>';
+  $.innerHTML=h;
+}
+if(id)connect();else draw();
+</script></body></html>
